@@ -10,14 +10,20 @@ use handlebars::Handlebars;
 
 fn main() {
     let eri_config = config::EriConfig::open().unwrap();
-    println!("{:?}", eri_config);
+    // println!("{:?}", eri_config);
 
     let mut namespaces: Vec<namespace::Namespace> = Vec::new();
     for (name, data) in eri_config.namespace {
         namespaces.push(namespace::Namespace::new(&name, &eri_config.export, &data).unwrap());
     }
-    println!("{:?}", namespaces);
+    println!("{:?}", namespaces[0].templates().unwrap());
 
+    let mut _handlebars: handlebars::Handlebars = Handlebars::new();
+    for template in namespaces[0].templates().unwrap() {
+        template.render(&mut _handlebars).unwrap();
+    }
+
+    // println!("{:?}", _template);
     // let template: String = std::fs::read_to_string("vault.hcl").unwrap();
     // let mut handlebars: Handlebars = Handlebars::new();
     // handlebars.register_template_string("vault.hcl", template).unwrap();

@@ -6,10 +6,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-use uclicious::DEFAULT_DUPLICATE_STRATEGY;
-use uclicious::raw::Priority;
 use uclicious::raw::object::ObjectError;
 use uclicious::raw::object::ObjectRef;
+use uclicious::raw::Priority;
+use uclicious::DEFAULT_DUPLICATE_STRATEGY;
 
 use uclicious_derive::*;
 
@@ -37,7 +37,9 @@ fn map_mode(src: ObjectRef) -> Result<Option<Mode>, ObjectError> {
     let group_value: u32 = val % 100 / 10;
     let all_value: u32 = val % 10;
 
-    Ok(Some(Mode::from(user_value * 64 + group_value * 8 + all_value)))
+    Ok(Some(Mode::from(
+        user_value * 64 + group_value * 8 + all_value,
+    )))
 }
 
 /// Map the eri config namespaces from ucl.
@@ -73,7 +75,7 @@ pub struct ExportConfig {
     /// The permissions that should be applied to a rendered template.
     /// By default, they are the same as the template file.
     #[ucl(default, map = "map_mode")]
-    permissions: Option<Mode>,
+    pub permissions: Option<Mode>,
 }
 
 impl ExportConfig {
@@ -101,7 +103,7 @@ impl Default for ExportConfig {
             dir: None,
             user: None,
             group: None,
-            permissions: None
+            permissions: None,
         };
         export_config.fill_defaults();
         export_config
@@ -130,15 +132,19 @@ impl EriConfig {
 
         let mut eri_config_builder = EriConfig::builder()?;
         eri_config_builder
-            .add_chunk_full(eri_config_string, Priority::default(), DEFAULT_DUPLICATE_STRATEGY)
+            .add_chunk_full(
+                eri_config_string,
+                Priority::default(),
+                DEFAULT_DUPLICATE_STRATEGY,
+            )
             .unwrap();
 
         match eri_config_builder.build() {
             Ok(mut value) => {
                 value.export.fill_defaults();
                 Ok(value)
-            },
-            Err(e) => Err(anyhow!("failed to build eri configuration: {}", e))
+            }
+            Err(e) => Err(anyhow!("failed to build eri configuration: {}", e)),
         }
     }
 }

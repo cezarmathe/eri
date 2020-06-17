@@ -1,5 +1,6 @@
 use crate::config::ExportConfig;
 use crate::data;
+use crate::template::*;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -43,12 +44,16 @@ pub struct Namespace<'a> {
     pub name: String,
     pub base_path: PathBuf,
     pub export_config: Cow<'a, ExportConfig>,
-    pub data: NamespaceData
+    pub data: NamespaceData,
 }
 
 impl<'a> Namespace<'a> {
     /// Create a new namespace.
-    pub fn new(name: &String, export_config: &'a ExportConfig, data: &NamespaceData) -> Result<Self> {
+    pub fn new(
+        name: &String,
+        export_config: &'a ExportConfig,
+        data: &NamespaceData,
+    ) -> Result<Self> {
         let current_dir_path: PathBuf = match std::env::current_dir() {
             Ok(value) => value,
             Err(e) => panic!("cannot get the current directory: {:?}", e),
@@ -65,5 +70,28 @@ impl<'a> Namespace<'a> {
             export_config: Cow::Borrowed(export_config),
             data: data.clone(),
         })
+    }
+
+    /// Get the templates in this namespace
+    pub fn templates(&self) -> Result<Vec<Template>> {
+        let template_data: TemplateData = {
+            let mut template_data = TemplateData::new();
+            template_data.insert(self.name.clone(), &self.data.0);
+            template_data
+        };
+
+        let mut vec: Vec<Template> = Vec::new();
+
+        for file in std::fs::read_dir(&self.base_path)? {
+            let file = file.unwrap();
+            let _template: Template = Template::new(
+                file.path(),
+                template_data.clone(),
+                std::borrow::Cow::Borrowed(&self.export_config),
+            )?;
+            vec.push(_template);
+        }
+
+        Ok(vec)
     }
 }
