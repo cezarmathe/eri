@@ -10,24 +10,24 @@ use handlebars::Handlebars;
 
 fn main() {
     let eri_config = config::EriConfig::open().unwrap();
-    // println!("{:?}", eri_config);
 
-    let mut namespaces: Vec<namespace::Namespace> = Vec::new();
-    for (name, data) in eri_config.namespace {
-        namespaces.push(namespace::Namespace::new(&name, &eri_config.export, &data).unwrap());
+    let namespaces: Vec<namespace::Namespace> = eri_config.namespaces().unwrap();
+
+    let mut _handlebars = Handlebars::new();
+    for namespace in &namespaces {
+        // namespace.gen_data_file(&mut _handlebars).unwrap();
+        namespace.render(&mut _handlebars).unwrap();
+        // // println!("data: {:?}", namespace);
+        // let mut params: Vec<String> = Vec::new();
+        // for template in namespace.templates().unwrap() {
+        //     template.register(&mut _handlebars).unwrap();
+        //     params.append(&mut template.parameter_list(&_handlebars).unwrap());
+        //     // template.render(&mut _handlebars).unwrap();
+        // }
+        // let mut file = std::fs::File::create(namespace.base_path.join("eri.conf")).unwrap();
+        // for param in &params {
+        //     use std::io::Write;
+        //     write!(file, "{} =\n", param).unwrap();
+        // }
     }
-    println!("{:?}", namespaces[0].templates().unwrap());
-
-    let mut _handlebars: handlebars::Handlebars = Handlebars::new();
-    for template in namespaces[0].templates().unwrap() {
-        template.render(&mut _handlebars).unwrap();
-    }
-
-    // println!("{:?}", _template);
-    // let template: String = std::fs::read_to_string("vault.hcl").unwrap();
-    // let mut handlebars: Handlebars = Handlebars::new();
-    // handlebars.register_template_string("vault.hcl", template).unwrap();
-    // println!("\nTemplate: {:?}", handlebars.get_template("vault.hcl").unwrap().elements);
-
-    // println!("\nApplied template:\n{}", handlebars.render("vault.hcl", &eri_config.data.get("vault").unwrap().0).unwrap());
 }

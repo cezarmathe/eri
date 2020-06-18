@@ -1,10 +1,13 @@
-use crate::namespace::NamespaceData;
+use crate::data;
+use crate::namespace::Namespace;
 
-use std::collections::BTreeMap;
-use std::convert::TryFrom;
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 use anyhow::Result;
+
+use serde_json::Map;
+use serde_json::Value;
 
 use uclicious::raw::object::ObjectError;
 use uclicious::raw::object::ObjectRef;
@@ -43,12 +46,12 @@ fn map_mode(src: ObjectRef) -> Result<Option<Mode>, ObjectError> {
 }
 
 /// Map the eri config namespaces from ucl.
-pub fn map_namespace(src: ObjectRef) -> Result<BTreeMap<String, NamespaceData>, ObjectError> {
-    let mut result: BTreeMap<String, NamespaceData> = BTreeMap::new();
+pub fn map_namespace(src: ObjectRef) -> Result<Map<String, Value>, ObjectError> {
+    let mut result: Map<String, Value> = Map::new();
 
     for item in src.iter() {
         let item_key = item.key().unwrap();
-        match NamespaceData::try_from(item) {
+        match data::object_ref_to_value(item) {
             Ok(value) => result.insert(item_key, value),
             Err(e) => return Err(ObjectError::Other(e.to_string())),
         };
@@ -79,7 +82,7 @@ pub struct ExportConfig {
 }
 
 impl ExportConfig {
-    /// Fill
+    /// Fill an export config with defaults
     fn fill_defaults(&mut self) {
         if self.dir.is_none() {
             let current_dir_path: PathBuf;
@@ -117,7 +120,7 @@ pub struct EriConfig {
     #[ucl(default)]
     pub export: ExportConfig,
     #[ucl(map = "map_namespace")]
-    pub namespace: BTreeMap<String, NamespaceData>,
+    pub namespace: Map<String, Value>,
 }
 
 impl EriConfig {
@@ -146,5 +149,18 @@ impl EriConfig {
             }
             Err(e) => Err(anyhow!("failed to build eri configuration: {}", e)),
         }
+    }
+
+    /// Get the namespaces of the configuration.
+    pub fn namespaces(&self) -> Result<Vec<Namespace>> {
+        let mut namespaces: Vec<Namespace> = Vec::new();
+        for (name, _) in &self.namespace {
+            namespaces.push(Namespace::new(
+                name,
+                &self.export,
+                Cow::Borrowed(&self.namespace),
+            )?);
+        }
+        Ok(namespaces)
     }
 }

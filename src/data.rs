@@ -53,16 +53,14 @@ pub fn object_ref_to_value(src: ObjectRef) -> Result<Value> {
 #[cfg(target_os = "linux")]
 pub fn get_user(path: &PathBuf) -> Result<String> {
     use std::os::linux::fs::MetadataExt;
-    let uid = std::fs::File::open(path)?
-        .metadata()?
-        .st_uid();
+    let uid = std::fs::File::open(path)?.metadata()?.st_uid();
     let user: users::User = match users::get_user_by_uid(uid) {
         Some(value) => value,
         None => return Err(anyhow!("no user found with the uid {}", uid)),
     };
     let user_string: String = match user.name().to_str() {
         Some(value) => value.to_owned(),
-        None => return Err(anyhow!("cannot retrieve user name from the uid {}", uid))
+        None => return Err(anyhow!("cannot retrieve user name from the uid {}", uid)),
     };
     Ok(user_string)
 }
@@ -70,16 +68,14 @@ pub fn get_user(path: &PathBuf) -> Result<String> {
 #[cfg(target_os = "linux")]
 pub fn get_group(path: &PathBuf) -> Result<String> {
     use std::os::linux::fs::MetadataExt;
-    let gid = std::fs::File::open(path)?
-        .metadata()?
-        .st_gid();
+    let gid = std::fs::File::open(path)?.metadata()?.st_gid();
     let group: users::Group = match users::get_group_by_gid(gid) {
         Some(value) => value,
         None => return Err(anyhow!("no group found with the gid {}", gid)),
     };
     let group_string: String = match group.name().to_str() {
         Some(value) => value.to_owned(),
-        None => return Err(anyhow!("cannot retrieve group name from the gid {}", gid))
+        None => return Err(anyhow!("cannot retrieve group name from the gid {}", gid)),
     };
     Ok(group_string)
 }
@@ -88,8 +84,6 @@ pub fn get_group(path: &PathBuf) -> Result<String> {
 pub fn get_permissions(path: &PathBuf) -> Result<Mode> {
     use std::os::linux::fs::MetadataExt;
     Ok(Mode::from(
-        std::fs::File::open(&path)?
-            .metadata()?
-            .st_mode(),
+        std::fs::File::open(&path)?.metadata()?.st_mode(),
     ))
 }

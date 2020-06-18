@@ -8,8 +8,9 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.31"
+chrono = "0.4"
 handlebars = "3.1.0"
-serde = "1.0"
+libc = "0.2.71"
 serde_json = "1.0"
 uclicious = "0.1.5"
 uclicious_derive = "0.1.5"
