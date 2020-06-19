@@ -65,10 +65,11 @@ impl<'a> Template<'a> {
 
     /// Render this template using the handlebars object.
     pub fn render(&self, handlebars: &mut Handlebars) -> Result<()> {
-        println!("{:#?}", self.data);
         let template_rendered_string: String = handlebars.render(&self.name, &self.data)?;
 
-        let mut file: File = File::create(PathBuf::from(self.export_config.dir.as_ref().unwrap()).join(self.filename()))?;
+        let mut file: File = File::create(
+            PathBuf::from(self.export_config.dir.as_ref().unwrap()).join(self.filename()),
+        )?;
         write!(file, "{}", template_rendered_string)?;
 
         Ok(())

@@ -137,7 +137,9 @@ impl<'a> Namespace<'a> {
             let mut params: BTreeSet<String> = BTreeSet::new();
             for template in templates {
                 for param in template.parameter_list(handlebars)? {
-                    params.insert(param);
+                    let mut param_parts: Vec<&str> = param.split(".").collect();
+                    param_parts.remove(0);
+                    params.insert(param_parts.join("."));
                 }
             }
             params

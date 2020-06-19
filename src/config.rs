@@ -22,24 +22,34 @@ use umask::Mode;
 
 /// Map permissions mode.
 fn map_mode(src: ObjectRef) -> Result<Option<Mode>, ObjectError> {
+    log::trace!("mapping ucl object {:?} to permissions mode", src);
     if src.is_null() {
+        log::trace!("ucl object is null, returning missing permissions");
         return Ok(None);
     }
+    log::trace!("checking if ucl object is an integer");
     if !src.is_integer() {
+        log::trace!("ucl object is not an integer, returning an error");
         return Err(ObjectError::WrongType {
             key: "permissions".to_owned(),
             actual_type: src.kind(),
             wanted_type: ucl_type::UCL_INT,
         });
     }
+    log::trace!("ucl object is an integer");
 
+    log::trace!("converting ucl object to an integer");
     use uclicious::TryInto;
     let val: u32 = src.try_into()?;
+    log::trace!("converted ucl object to an integer");
 
+    log::trace!("converting integer from base 8 to base 10");
     let user_value: u32 = val / 100;
     let group_value: u32 = val % 100 / 10;
     let all_value: u32 = val % 10;
+    log::trace!("converted integer from base 8 to base 10");
 
+    log::trace!("returning permissions mode");
     Ok(Some(Mode::from(
         user_value * 64 + group_value * 8 + all_value,
     )))
@@ -47,16 +57,26 @@ fn map_mode(src: ObjectRef) -> Result<Option<Mode>, ObjectError> {
 
 /// Map the eri config namespaces from ucl.
 pub fn map_namespace(src: ObjectRef) -> Result<Map<String, Value>, ObjectError> {
+    log::trace!("mapping namespaces from configuration");
     let mut result: Map<String, Value> = Map::new();
 
     for item in src.iter() {
+        log::trace!("mapping item {:?}", item);
         let item_key = item.key().unwrap();
+        log::trace!("namespace key is {}", item_key);
         match data::object_ref_to_value(item) {
-            Ok(value) => result.insert(item_key, value),
-            Err(e) => return Err(ObjectError::Other(e.to_string())),
+            Ok(value) => {
+                log::trace!("converted ucl object to value");
+                result.insert(item_key, value)
+            },
+            Err(e) => {
+                log::trace!("failed to convert ucl object to value");
+                return Err(ObjectError::Other(e.to_string()));
+            },
         };
     }
 
+    log::trace!("returning namespace map: {:?}", result);
     Ok(result)
 }
 
@@ -84,17 +104,28 @@ pub struct ExportConfig {
 impl ExportConfig {
     /// Fill an export config with defaults
     fn fill_defaults(&mut self) {
+        log::trace!("filling export configuration with the defaults");
         if self.dir.is_none() {
+            log::trace!("filling the directory for the export configuration with the default value");
             let current_dir_path: PathBuf;
             match std::env::current_dir() {
-                Ok(value) => current_dir_path = value,
-                Err(e) => panic!("cannot get the current directory: {:?}", e),
+                Ok(value) => {
+                    current_dir_path = value;
+                    log::trace!("current dir path: {:?}", current_dir_path);
+                },
+                Err(e) => {
+                    log::error!("cannot get the current directory: {:#?}", e);
+                    std::process::exit(1);
+                },
             }
 
+            log::trace!("converting current dir path to string");
             if let Some(value) = current_dir_path.to_str() {
+                log::trace!("converted current dir path to string");
                 self.dir = Some(value.to_owned());
             } else {
-                panic!("failed to convert current directory path into a string");
+                log::error!("failed to convert current directory path into a string");
+                std::process::exit(1);
             }
         }
     }
@@ -102,6 +133,7 @@ impl ExportConfig {
 
 impl Default for ExportConfig {
     fn default() -> ExportConfig {
+        log::trace!("requested default export config");
         let mut export_config = ExportConfig {
             dir: None,
             user: None,
@@ -109,6 +141,7 @@ impl Default for ExportConfig {
             permissions: None,
         };
         export_config.fill_defaults();
+        log::trace!("default export config: {:?}", export_config);
         export_config
     }
 }
