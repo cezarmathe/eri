@@ -2,6 +2,7 @@ use crate::config::ExportConfig;
 use crate::data;
 
 use std::borrow::Cow;
+use std::ffi::CString;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -65,11 +66,40 @@ impl<'a> Template<'a> {
 
     /// Render this template using the handlebars object.
     pub fn render(&self, handlebars: &mut Handlebars) -> Result<()> {
+        log::debug!("Rendering template {}", self.name);
         let template_rendered_string: String = handlebars.render(&self.name, &self.data)?;
 
-        let mut file: File = File::create(
-            PathBuf::from(self.export_config.dir.as_ref().unwrap()).join(self.filename()),
-        )?;
+        let user: &users::User = self.export_config.user.as_ref().unwrap();
+        let group: &users::Group = self.export_config.group.as_ref().unwrap();
+        let mode: umask::Mode = self.export_config.permissions.unwrap();
+
+        let path_dir: PathBuf = PathBuf::from(self.export_config.dir.as_ref().unwrap());
+        if !path_dir.exists() {
+            std::fs::create_dir(&path_dir)?;
+            chown(&path_dir, user, group)?;
+            let dir_mode: umask::Mode = {
+                let mut dir_mode: umask::Mode = mode;
+                if !dir_mode.has(umask::USER_EXEC) {
+                    dir_mode = dir_mode.with(umask::USER_EXEC);
+                }
+                if !dir_mode.has(umask::GROUP_EXEC) {
+                    dir_mode = dir_mode.with(umask::GROUP_EXEC);
+                }
+                if !dir_mode.has(umask::OTHERS_EXEC) {
+                    dir_mode = dir_mode.with(umask::OTHERS_EXEC);
+                }
+                dir_mode
+            };
+            chmod(&path_dir, dir_mode)?;
+        } else if !path_dir.is_dir() {
+            return Err(anyhow!("export dir already exists"));
+        }
+
+        let path_file: PathBuf = path_dir.join(self.filename());
+        let mut file: File = File::create(&path_file)?;
+        chown(&path_file, user, group)?;
+        chmod(&path_file, mode)?;
+
         write!(file, "{}", template_rendered_string)?;
 
         Ok(())
@@ -101,13 +131,52 @@ impl<'a> Template<'a> {
 
     /// Get the name of the namespace of this template.
     pub fn namespace(&self) -> &str {
-        let splits: &Vec<&str> = &self.name.split("/").collect();
+        let splits: &Vec<&str> = &self.name.split('/').collect();
         splits[0]
     }
 
     /// Get the file name of this template.
     pub fn filename(&self) -> &str {
-        let splits: &Vec<&str> = &self.name.split("/").collect();
+        let splits: &Vec<&str> = &self.name.split('/').collect();
         splits[1]
     }
+}
+
+fn chown(path: &PathBuf, user: &users::User, group: &users::Group) -> Result<()> {
+    let cstr_path: CString = CString::new(path.to_str().unwrap()).unwrap();
+    let ret_val: libc::c_int = unsafe { libc::chown(cstr_path.as_ptr(), user.uid(), group.gid()) };
+    if ret_val == -1 {
+        let errno_val: i32 = errno::errno().into();
+        match errno_val {
+            libc::EPERM => {
+                return Err(anyhow!(
+                    "chown: this process lacks permission to make the requested change"
+                ))
+            }
+            libc::EROFS => return Err(anyhow!("chown: the file is on a read-only file system")),
+            _ => panic!("chown: unexpected errno: {}", errno_val),
+        }
+    }
+    Ok(())
+}
+
+fn chmod(path: &PathBuf, mode: umask::Mode) -> Result<()> {
+    let cstr_path: CString = CString::new(path.to_str().unwrap()).unwrap();
+    let ret_val: libc::c_int = unsafe { libc::chmod(cstr_path.as_ptr(), mode.into()) };
+    if ret_val == -1 {
+        let errno_val: i32 = errno::errno().into();
+        match errno_val {
+            libc::ENOENT => return Err(anyhow!("chmod: the named file doesn’t exist")),
+            libc::EPERM => {
+                return Err(anyhow!(
+                    "chmod: this process does not have permission to change the access permissions of this file"
+                ))
+            }
+            libc::EROFS => {
+                return Err(anyhow!("chmod: the file resides on a read-only file system"))
+            }
+            _ => panic!("chmod: unexpected errno: {}", errno_val),
+        }
+    }
+    Ok(())
 }

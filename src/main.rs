@@ -20,9 +20,13 @@ use log::LevelFilter;
 
 use handlebars::Handlebars;
 
+/// The version of eri
+const ERI_VERSION: &str = "0.0.0";
+
 fn main() {
+    human_panic::setup_panic!();
     let mut app: App = App::new("eri")
-        .version("0.1")
+        .version(ERI_VERSION)
         .author("Armand Cezar Mathe <me@cezarmathe.com>")
         .about("Configuration templating for regular people.")
         .arg(
@@ -43,7 +47,11 @@ fn main() {
     let log_level: LevelFilter = match matches.occurrences_of("verbosity") {
         0 => LevelFilter::Info,
         1 => LevelFilter::Debug,
-        _ => LevelFilter::Trace,
+        2 => LevelFilter::Trace,
+        _ => {
+            println!("The source code is available at https://github.com/cezarmathe/eri.");
+            std::process::exit(0);
+        }
     };
     fern::Dispatch::new()
         .format(|out, message, record| {
@@ -57,59 +65,59 @@ fn main() {
             out.finish(format_args!("{} {}", prefix, message));
         })
         .level(log_level)
+        .level_for("users", LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()
         .unwrap();
-    // log::trace!("initialized logging");
 
-    // log::debug!("loading eri configuration");
     let eri_config = match config::EriConfig::open() {
-        Ok(value) => {
-            // log::trace!("loaded eri configuration: {:#?}", value);
-            value
-        }
+        Ok(value) => value,
         Err(e) => {
-            // log::error!("failed to load eri configuration: {:#?}", e);
+            log::error!("Failed to open the eri configuration: {:#?}", e);
             std::process::exit(1);
         }
     };
 
-    // log::debug!("loading namespaces");
     let namespaces: Vec<namespace::Namespace> = match eri_config.namespaces() {
-        Ok(value) => {
-            // log::trace!("loaded namespaces: {:#?}", value);
-            value
-        }
+        Ok(value) => value,
         Err(e) => {
-            // log::error!("failed to load namespaces: {:#?}", e);
+            log::error!("Failed to load the namespaces: {:#?}", e);
             std::process::exit(1);
         }
     };
 
-    // log::debug!("creating the handlebars template engine");
     let mut handlebars = Handlebars::new();
-    // log::trace!("created the handlebars template engine: {:#?}", handlebars);
 
-    // log::trace!("checking subcommand");
-    if let Some(_) = matches.subcommand_matches("render") {
-        // log::info!("rendering configuration files");
+    if matches.subcommand_matches("render").is_some() {
         let before = Local::now();
         for namespace in namespaces {
-            namespace.render(&mut handlebars).unwrap();
+            if let Err(e) = namespace.render(&mut handlebars) {
+                log::error!("Failed to render namespace {:#?}: {:#?}", namespace, e);
+            }
         }
-        let after = Local::now();
-        let duration: Duration = after - before;
-        // log::info!(
-        //     "rendering took {:#?} ms",
-        //     duration.num_nanoseconds().unwrap() as f64 / 1000000.0
-        // );
-    } else if let Some(_) = matches.subcommand_matches("gendata") {
-        // log::info!("generating data files for each namespace");
+        let duration: Duration = Local::now() - before;
+        if duration.num_seconds() > 0 {
+            log::info!(
+                "Rendering took {} seconds.",
+                duration.num_milliseconds() as f64 / 1000.0
+            );
+        } else {
+            log::info!(
+                "Rendering took {} milliseconds.",
+                duration.num_microseconds().unwrap() as f64 / 1000.0
+            )
+        }
+    } else if matches.subcommand_matches("gendata").is_some() {
         for namespace in namespaces {
-            namespace.gen_data_file(&mut handlebars).unwrap();
+            if let Err(e) = namespace.gen_data_file(&mut handlebars) {
+                log::error!(
+                    "Failed to generate the data file for the namespace {:#?}: {:#?}",
+                    namespace,
+                    e
+                );
+            }
         }
     } else {
-        // log::trace!("no subcommand, printing the help section");
         app.print_help().unwrap();
     }
 }

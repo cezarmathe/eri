@@ -33,13 +33,16 @@ pub struct Namespace<'a> {
 impl<'a> Namespace<'a> {
     /// Create a new namespace.
     pub fn new(
-        name: &String,
+        name: &str,
         export_config: &'a ExportConfig,
         mut data: Cow<'a, Map<String, Value>>,
     ) -> Result<Self> {
         let current_dir_path: PathBuf = match std::env::current_dir() {
             Ok(value) => value,
-            Err(e) => panic!("cannot get the current directory: {:?}", e),
+            Err(e) => {
+                log::error!("Cannot get the current directory: {:#?}", e);
+                std::process::exit(1);
+            }
         };
 
         let base_path: PathBuf = current_dir_path.join(name);
@@ -48,44 +51,41 @@ impl<'a> Namespace<'a> {
         }
 
         let additional_eri_conf: PathBuf = base_path.join("eri.conf");
-        if additional_eri_conf.exists() {
-            if additional_eri_conf.is_file() {
-                let eri_config_string: String = std::fs::read_to_string(additional_eri_conf)?;
-                let mut parser: Parser = Parser::default();
-                parser.add_chunk_full(
-                    eri_config_string,
-                    Priority::default(),
-                    DEFAULT_DUPLICATE_STRATEGY,
-                )?;
-                let mut new_values: Map<String, Value> = Map::new();
-                for item in parser.get_object()?.iter() {
-                    let item_key = item.key().unwrap();
-                    match data::object_ref_to_value(item) {
-                        Ok(value) => new_values.insert(item_key, value),
-                        Err(e) => return Err(e),
-                    };
-                }
-                if new_values.len() != 0 {
-                    let mut namespace_data: Cow<Map<String, Value>> = match data.to_mut().get(name)
-                    {
-                        Some(value) => {
-                            if let Value::Object(obj) = value {
-                                Cow::Borrowed(obj)
-                            } else {
-                                panic!("something messed up the data")
-                            }
+        if additional_eri_conf.exists() && additional_eri_conf.is_file() {
+            let eri_config_string: String = std::fs::read_to_string(additional_eri_conf)?;
+            let mut parser: Parser = Parser::default();
+            parser.add_chunk_full(
+                eri_config_string,
+                Priority::default(),
+                DEFAULT_DUPLICATE_STRATEGY,
+            )?;
+            let mut new_values: Map<String, Value> = Map::new();
+            for item in parser.get_object()?.iter() {
+                let item_key = item.key().unwrap();
+                match data::object_ref_to_value(item) {
+                    Ok(value) => new_values.insert(item_key, value),
+                    Err(e) => return Err(e),
+                };
+            }
+            if !new_values.is_empty() {
+                let mut namespace_data: Cow<Map<String, Value>> = match data.to_mut().get(name) {
+                    Some(value) => {
+                        if let Value::Object(obj) = value {
+                            Cow::Borrowed(obj)
+                        } else {
+                            panic!("something messed up the data")
                         }
-                        None => Cow::Owned(Map::new()),
-                    };
-                    namespace_data.to_mut().append(&mut new_values);
-                    let value: Value = Value::Object(namespace_data.into_owned());
-                    data.to_mut().insert(name.clone(), value);
-                }
+                    }
+                    None => Cow::Owned(Map::new()),
+                };
+                namespace_data.to_mut().append(&mut new_values);
+                let value: Value = Value::Object(namespace_data.into_owned());
+                data.to_mut().insert(name.to_owned(), value);
             }
         }
 
         Ok(Namespace {
-            name: name.clone(),
+            name: name.to_owned(),
             base_path,
             export_config: Cow::Borrowed(export_config),
             data,
@@ -97,7 +97,7 @@ impl<'a> Namespace<'a> {
         let mut vec: Vec<Template> = Vec::new();
 
         for file in std::fs::read_dir(&self.base_path)? {
-            let file = file.unwrap();
+            let file = file?;
             let file_path: PathBuf = file.path();
             if file_path.ends_with("eri.conf") {
                 continue;
@@ -137,7 +137,7 @@ impl<'a> Namespace<'a> {
             let mut params: BTreeSet<String> = BTreeSet::new();
             for template in templates {
                 for param in template.parameter_list(handlebars)? {
-                    let mut param_parts: Vec<&str> = param.split(".").collect();
+                    let mut param_parts: Vec<&str> = param.split('.').collect();
                     param_parts.remove(0);
                     params.insert(param_parts.join("."));
                 }
@@ -148,17 +148,57 @@ impl<'a> Namespace<'a> {
             return Ok(());
         }
 
-        let mut file = File::create(self.base_path.join("eri.conf")).unwrap();
-        writeln!(file, "# Data file generated by eri at {:?}\n", Local::now())?;
+        let data_file_path: PathBuf = self.base_path.join("eri.conf");
+        if data_file_path.exists() && data_file_path.is_file() {
+            let data_file_backup_path: PathBuf = self
+                .base_path
+                .join(format!("eri.conf.bk_{:?}", Local::now()));
+            log::info!(
+                "Data file for namespace {} already exists at {:?}, making a backup at {:?}",
+                self.name,
+                data_file_path,
+                data_file_backup_path
+            );
+            match std::fs::copy(&data_file_path, data_file_backup_path) {
+                Ok(_) => log::debug!("Backup successful"),
+                Err(e) => {
+                    return Err(anyhow!("Failed to make a backup, not proceeding: {:#?}", e));
+                }
+            }
+        }
+
+        let mut file = match File::create(&data_file_path) {
+            Ok(value) => value,
+            Err(e) => {
+                return Err(anyhow!(
+                    "could not create data file for namespace {}: {:#?}",
+                    self.name,
+                    e
+                ))
+            }
+        };
+        writeln!(
+            file,
+            "# Data file generated by eri {} at {:?}\n",
+            crate::ERI_VERSION,
+            Local::now()
+        )?;
         for param in &params {
             writeln!(file, "{} =", param)?;
         }
+
+        log::info!(
+            "Data file for namespace {} generated at {:?}",
+            self.name,
+            data_file_path
+        );
 
         Ok(())
     }
 
     /// Render all templates inside the namespace.
     pub fn render(&self, handlebars: &mut Handlebars) -> Result<()> {
+        log::info!("Rendering namespace {}", self.name);
         let templates: Vec<Template> = self.templates()?;
         for template in &templates {
             template.register(handlebars)?;
