@@ -1,9 +1,0 @@
-# Example eri configuration file for vault.hcl
-
-data {
-    address = "127.0.0.1:8200"
-    tls_cert_file = "/etc/vault.d/tls/cert.pem"
-    tls_key_file = "/etc/vault.d/tls/key.pem"
-    consul_address = "127.0.0.1:8200"
-    ui = true
-}
