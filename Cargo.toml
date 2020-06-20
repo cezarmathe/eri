@@ -1,6 +1,6 @@
 [package]
 name = "eri"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["cezarmathe <me@cezarmathe.com>"]
 edition = "2018"
 
